@@ -1,0 +1,13 @@
+{
+  "name": "WakaTimeCLI",
+  "globalDependencies": {
+    "commander": "registry:dt/commander#2.3.0+20160317120654",
+    "lodash": "github:DefinitelyTyped/DefinitelyTyped/lodash/lodash.d.ts#b4bbee8f60560c34bc74b154b283f7ce83a31dae",
+    "node": "github:DefinitelyTyped/DefinitelyTyped/node/node.d.ts#b4bbee8f60560c34bc74b154b283f7ce83a31dae",
+    "require": "github:DefinitelyTyped/DefinitelyTyped/requirejs/require.d.ts#b4bbee8f60560c34bc74b154b283f7ce83a31dae"
+  },
+  "dependencies": {
+    "chalk": "registry:npm/chalk#1.0.0+20160211003958",
+    "request": "registry:npm/request#2.69.0+20160428223725"
+  }
+}
