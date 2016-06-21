@@ -5,8 +5,27 @@ import * as chalk from 'chalk';
 import * as cmd from 'commander';
 import * as _ from 'lodash';
 
+interface TimeInfo {
+  name: string;
+  total_seconds: number;
+}
+
+export interface RangeInfo {
+  start: string;
+  end: string;
+  name: string;
+}
+
+export class Ranges {
+  today: RangeInfo;
+  yesterday: RangeInfo;
+  week: RangeInfo;
+  month: RangeInfo;
+  year: RangeInfo;
+}
+
 export class WakaTimeCLI {
-  apiString = '&api_key=';
+  apiString = 'api_key=';
   homedir = process.env.HOME;
   wakafile = this.homedir + '/.wakafile';
   apiUrl = "https://wakatime.com/api/v1";
@@ -45,33 +64,28 @@ export class WakaTimeCLI {
 
 
   // Date function used to format date on API request
-  dateInfo() {
+  dateInfo(): Ranges {
     let df = "YYYY-MM-DD";
-    return {
-      day: moment().format(df),
-      yesterday: moment().subtract(1, 'days').format(df),
-      week: moment().subtract(6, 'days').format(df),
-      month: moment().subtract(29, 'days').format(df),
-      year: moment().subtract(364, 'days').format(df)
-    }
+    let today = moment().format(df);
+    let r = new Ranges();
+    r.today = { start: today, end: today, name: "Today" };
+    r.yesterday = { start: moment().subtract(1, 'days').format(df), end: today, name: "Yesterday" };
+    r.week = { start: moment().subtract(1, 'weeks').format(df), end: today, name: "Week" };
+    r.month = { start: moment().subtract(1, 'months').format(df), end: today, name: "Month" };
+    r.year = { start: moment().subtract(365, 'days').format(df), end: today, name: "Year" };
+    return r;
   };
 
-  formatTime(seconds) {
-    return moment.duration(seconds, "s").humanize();
-  }
-
-  // Prints provided obj to terminal with chalk.magenta or blue color
-  printSection(obj, color) {
-    let sorted = _(obj).map((v,k) => {return {name: k, time: v}}).orderBy((o) => {return o.time}, 'desc').forEach((o) =>{
-      console.log(color(` ${o.name}: `) + this.formatTime(o.time));
-    });
-  };
-
-  doRequest(action): Promise<any> {
+  doRequest(action: string): Promise<any> {
     return new Promise((resolve, reject) => {
       try {
         var apiKey = this.readApiKey();
-        let url = `${this.apiUrl}/${action}${this.apiString}${apiKey}`;
+        let url;
+        if (action.endsWith('?')) {
+          url = `${this.apiUrl}/${action}${this.apiString}${apiKey}`;
+        } else {
+          url = `${this.apiUrl}/${action}&${this.apiString}${apiKey}`;
+        }
         request(url, function (error, response, body) {
 
           if (!error && response.statusCode == 200) {
@@ -102,11 +116,11 @@ export class WakaTimeCLI {
   }
 
   // Parse data for Today or Yesterday option & prints to terminal
-  async detailsDay(day: string, dayText: string): Promise<void> {
-    let body = await this.doRequest(`users/current/summaries?start=${day}&end=${day}`);
+  async detailsDay(range: RangeInfo): Promise<void> {
+    let body = await this.doRequest(`users/current/summaries?start=${range.start}&end=${range.end}`);
 
     console.log(' '); // Empty Line for formatting
-    console.log(' ' + chalk.cyan(dayText + ': ') + body.data[0].grand_total.text + ' (Total)'); // Prints provided total hours/minutes
+    console.log(' ' + chalk.cyan(range.name + ': ') + body.data[0].grand_total.text + ' (Total)'); // Prints provided total hours/minutes
     console.log(' '); // Empty Line for formatting
 
     body.data[0].languages.forEach((val) => {
@@ -124,35 +138,48 @@ export class WakaTimeCLI {
 
 
   // Parse data for last seven days of work and print to console
-  async detailsRange(from: string, dayText: string, to: string): Promise<void> {
-    let body = await this.doRequest(`users/current/summaries?start=${from}&end=${to}`);
+  async detailsRange(range: RangeInfo, projectFilterRegex: string = '.*'): Promise<void> {
 
-    let minutes = _(body.data).map('grand_total').sumBy((o:{hours:number, minutes:number}) => {return o.hours*60 + o.minutes});
+    let body = await this.doRequest(`users/current/summaries?start=${range.start}&end=${range.end}`);
+
+    let rgx = new RegExp(projectFilterRegex);
+
+    let minutes = _(body.data)
+      .map('grand_total')
+      .sumBy((o: { hours: number, minutes: number }) => { return o.hours * 60 + o.minutes });
 
     // Week Data logged to terminal here
+    console.log(' ' + chalk.green(`filter projects by regex: ${projectFilterRegex}, ` + chalk.bgRed("be aware that language times still sum over all projects!!")));
     console.log(' '); // Empty Line for formatting
-    console.log(' ' + chalk.cyan(dayText + ': ') + moment.duration(minutes, 'm').humanize() +' (Total)'); // Prints calculated total hours/minutes
+    console.log(' ' + chalk.cyan(range.name + ': ') + moment.duration(minutes, 'm').humanize() + ' (Total)'); // Prints calculated total hours/minutes
     console.log(' '); // Empty Line for formatting
 
     _(body.data)
-    .flatMap('languages')
-    .groupBy((p:any)=>{return p.name})
-    .map((list, name) => { return {name:name, sum: _.sumBy(list, 'total_seconds')}})
-    .orderBy('sum', 'desc')
-    .forEach((o) =>{
-      console.log(chalk.magenta(` ${o.name}: `) + this.formatTime(o.sum));
+      .flatMap('languages')
+      .groupBy((p: TimeInfo) => { return p.name })
+      .map((list, name) => { return { name: name, sum: _.sumBy(list, 'total_seconds') } })
+      .orderBy('sum', 'desc')
+      .forEach((o) => {
+        console.log(chalk.magenta(` ${o.name}: `) + moment.duration(o.sum, 's').humanize());
+      });
+
+    console.log(' '); // Empty Line for formatting
+
+    let projects = _(body.data)
+      .flatMap('projects')
+      .filter((p: TimeInfo) => { return rgx.test(p.name) })
+      .groupBy((p: TimeInfo) => { return p.name })
+      .map((list, name) => { return { name: name, sum: _.sumBy(list, 'total_seconds') } })
+      .orderBy('sum', 'desc')
+      .value();
+
+    projects.forEach((o) => {
+      console.log(chalk.blue(` ${o.name}: `) + moment.duration(o.sum, 's').humanize());
     });
 
     console.log(' '); // Empty Line for formatting
-    
-    _(body.data)
-    .flatMap('projects')
-    .groupBy((p:any)=>{return p.name})
-    .map((list, name) => { return {name:name, sum: _.sumBy(list, 'total_seconds')}})
-    .orderBy('sum', 'desc')
-    .forEach((o) =>{
-      console.log(chalk.blue(` ${o.name}: `) + this.formatTime(o.sum));
-    });
+    let projectsSum = _(projects).sumBy('sum');
+    console.log(chalk.underline.blue(` filtered sum: `) + moment.duration(projectsSum, 's').humanize());
 
     console.log(' '); // Empty Line for formatting
   }
@@ -164,40 +191,49 @@ cmd.version('0.0.1')
 let gotCommand = false;
 let w = new WakaTimeCLI();
 
-cmd.command('today')
+cmd.command('today [projectRegexfilter]')
   .alias("t")
   .description('show todays data')
   .action(() => {
     gotCommand = true;
     var day = w.dateInfo();
-    w.detailsDay(day.day, "Today");
+    w.detailsDay(day.today);
   });
 
-cmd.command('week')
+cmd.command('yesterday [projectRegexfilter]')
+  .alias("yd")
+  .description('show yesterdays data')
+  .action(() => {
+    gotCommand = true;
+    var day = w.dateInfo();
+    w.detailsDay(day.yesterday);
+  });
+
+cmd.command('week [projectRegexfilter]')
   .alias("w")
   .description('show weeks data')
-  .action(() => {
+  .action((projectRegexfilter) => {
     gotCommand = true;
     var day = w.dateInfo();
-    w.detailsRange(day.week, "Week", day.day);
+    w.detailsRange(day.week, projectRegexfilter);
   });
 
-cmd.command('month')
+cmd.command('month [projectRegexfilter]')
   .alias("m")
   .description('show months data')
-  .action(() => {
+  .action((projectRegexfilter) => {
     gotCommand = true;
     var day = w.dateInfo();
-    w.detailsRange(day.month, "Month", day.day);
+    w.detailsRange(day.month, projectRegexfilter);
   });
 
-cmd.command('year')
-  .alias("m")
+cmd.command('year [projectRegexfilter]')
+  .alias("y")
   .description('show years data')
-  .action(() => {
+  .action((projectRegexfilter) => {
     gotCommand = true;
     var day = w.dateInfo();
-    w.detailsRange(day.year, "Year", day.day);
+    w.detailsRange(day.year, projectRegexfilter);
   });
 
 cmd.command('api <key>')
@@ -207,9 +243,10 @@ cmd.command('api <key>')
     w.setApiKey(key);
   });
 
+cmd.parse(process.argv);
+
 // handle today as default
 if (!gotCommand) {
   process.argv.push('t')
+  cmd.parse(process.argv);
 }
-
-cmd.parse(process.argv);

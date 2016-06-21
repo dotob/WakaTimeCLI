@@ -1,12 +1,12 @@
 {
   "name": "wakatimecli",
-  "version": "0.1.7",
+  "version": "0.0.1",
   "repository": {
     "url": ".."
   },
   "description": "See your WakaTime report directly in the terminal",
   "main": "./js/wakatime",
-  "preferGlobal": "true",
+  "preferGlobal": true,
   "scripts": {
     "start": "node js/wakatime.js"
   },

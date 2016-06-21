@@ -12,7 +12,7 @@ Log into your WakaTime.com account and find your API Key in the settings (https:
 
 Add your API Key
 ```shell
-$ wakatime -api yourApiKeyHere
+$ wakatime api yourApiKeyHere
 ```
 
 
@@ -20,19 +20,14 @@ $ wakatime -api yourApiKeyHere
 
 Display WakaTime data from today:
 ```shell
-$ wakatime -t or wakatime -today
-```
-
-Display WakaTime data from yesterday:
-```shell
-$ wakatime -y or $ wakatime -yesterday
+$ wakatime or wakatime t or wakatime today
 ```
 
 Display WakaTime data from the last 7 days:
 ```shell
-$ wakatime -w or $ wakatime -week
+$ wakatime w or $ wakatime week
 ```
 
 ###Info
 
-Written using the WakaTime API (https://wakatime.com/api).
+Written in TypeScript using the WakaTime API (https://wakatime.com/api).
