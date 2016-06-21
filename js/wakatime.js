@@ -12,6 +12,7 @@ const moment = require('moment');
 const request = require('request');
 const chalk = require('chalk');
 const cmd = require('commander');
+const _ = require('lodash');
 class WakaTimeCLI {
     constructor() {
         this.apiString = '&api_key=';
@@ -69,21 +70,9 @@ class WakaTimeCLI {
     }
     // Prints provided obj to terminal with chalk.magenta or blue color
     printSection(obj, color) {
-        console.dir(obj);
-        // sort it first
-        let sortable = [];
-        for (let key in obj) {
-            sortable.push([key, obj[key]]);
-        }
-        let sorted = sortable.sort(function (a, b) { return b[1] - a[1]; });
-        for (var i = 0; i < sorted.length; i++) {
-            if (color === 'chalk.magenta') {
-                console.log(chalk.magenta(' ' + sorted[i][0] + ': ') + this.formatTime(sorted[i][1]));
-            }
-            else if (color === 'blue') {
-                console.log(chalk.blue(' ' + sorted[i][0] + ': ') + this.formatTime(sorted[i][1]));
-            }
-        }
+        let sorted = _(obj).map((v, k) => { return { name: k, time: v }; }).orderBy((o) => { return o.time; }, 'desc').forEach((o) => {
+            console.log(color(` ${o.name}: `) + this.formatTime(o.time));
+        });
     }
     ;
     doRequest(action) {
@@ -143,52 +132,28 @@ class WakaTimeCLI {
     detailsRange(from, dayText, to) {
         return __awaiter(this, void 0, Promise, function* () {
             let body = yield this.doRequest(`users/current/summaries?start=${from}&end=${to}`);
-            var gtHours = 0;
-            var gtMinutes = 0;
-            var languages = {};
-            var projects = {};
-            // Iterates through returned object and adds all hours
-            body.data.forEach((val) => {
-                gtHours = gtHours + val.grand_total.hours;
-                gtMinutes = gtMinutes + val.grand_total.minutes;
-            });
-            // Converts minutes to hours and adds to total
-            if (gtMinutes > 59) {
-                var gtHours = gtHours + Math.floor(gtMinutes / 60);
-                var gtMinutes = gtMinutes % 60;
-            }
-            // Iterates through returned object and finds all unique language names
-            // Adds all corresponding time to each language
-            body.data.forEach((val) => {
-                val.languages.forEach((val) => {
-                    if (!(val.name in languages)) {
-                        languages[val.name] = val.total_seconds;
-                    }
-                    else {
-                        languages[val.name] = languages[val.name] + val.total_seconds;
-                    }
-                });
-            });
-            // Iterates through returned object and finds all unique project names
-            // Adds all corresponding time to each project
-            body.data.forEach((val) => {
-                val.projects.forEach((val) => {
-                    var time = [val.hours, val.minutes];
-                    if (!(val.name in projects)) {
-                        projects[val.name] = val.total_seconds;
-                    }
-                    else {
-                        projects[val.name] = projects[val.name] + val.total_seconds;
-                    }
-                });
-            });
+            let minutes = _(body.data).map('grand_total').sumBy((o) => { return o.hours * 60 + o.minutes; });
             // Week Data logged to terminal here
             console.log(' '); // Empty Line for formatting
-            console.log(' ' + chalk.cyan(dayText + ': ') + gtHours + ' hours ' + gtMinutes + ' minutes (Total)'); // Prints calculated total hours/minutes
+            console.log(' ' + chalk.cyan(dayText + ': ') + moment.duration(minutes, 'm').humanize() + ' (Total)'); // Prints calculated total hours/minutes
             console.log(' '); // Empty Line for formatting
-            this.printSection(languages, 'magenta'); // Prints each item in the obj
+            _(body.data)
+                .flatMap('languages')
+                .groupBy((p) => { return p.name; })
+                .map((list, name) => { return { name: name, sum: _.sumBy(list, 'total_seconds') }; })
+                .orderBy('sum', 'desc')
+                .forEach((o) => {
+                console.log(chalk.magenta(` ${o.name}: `) + this.formatTime(o.sum));
+            });
             console.log(' '); // Empty Line for formatting
-            this.printSection(projects, 'blue'); // Prints each item in the obj
+            _(body.data)
+                .flatMap('projects')
+                .groupBy((p) => { return p.name; })
+                .map((list, name) => { return { name: name, sum: _.sumBy(list, 'total_seconds') }; })
+                .orderBy('sum', 'desc')
+                .forEach((o) => {
+                console.log(chalk.blue(` ${o.name}: `) + this.formatTime(o.sum));
+            });
             console.log(' '); // Empty Line for formatting
         });
     }
