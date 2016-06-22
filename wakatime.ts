@@ -136,6 +136,10 @@ export class WakaTimeCLI {
     console.log(' '); // Empty Line for formatting
   };
 
+  formatDuration(duration: number, unit: string): string {
+    let hours = Math.round(moment.duration(duration, unit).asHours());
+    return `${hours} h`;
+  }
 
   // Parse data for last seven days of work and print to console
   async detailsRange(range: RangeInfo, projectFilterRegex: string = '.*'): Promise<void> {
@@ -151,7 +155,7 @@ export class WakaTimeCLI {
     // Week Data logged to terminal here
     console.log(' ' + chalk.green(`filter projects by regex: ${projectFilterRegex}, ` + chalk.bgRed("be aware that language times still sum over all projects!!")));
     console.log(' '); // Empty Line for formatting
-    console.log(' ' + chalk.cyan(range.name + ': ') + moment.duration(minutes, 'm').humanize() + ' (Total)'); // Prints calculated total hours/minutes
+    console.log(' ' + chalk.cyan(range.name + ': ') + this.formatDuration(minutes, 'm') + ' (Total)'); // Prints calculated total hours/minutes
     console.log(' '); // Empty Line for formatting
 
     _(body.data)
@@ -160,7 +164,7 @@ export class WakaTimeCLI {
       .map((list, name) => { return { name: name, sum: _.sumBy(list, 'total_seconds') } })
       .orderBy('sum', 'desc')
       .forEach((o) => {
-        console.log(chalk.magenta(` ${o.name}: `) + moment.duration(o.sum, 's').humanize());
+        console.log(chalk.magenta(` ${o.name}: `) + this.formatDuration(o.sum, 's'));
       });
 
     console.log(' '); // Empty Line for formatting
@@ -174,12 +178,12 @@ export class WakaTimeCLI {
       .value();
 
     projects.forEach((o) => {
-      console.log(chalk.blue(` ${o.name}: `) + moment.duration(o.sum, 's').humanize());
+      console.log(chalk.blue(` ${o.name}: `) + this.formatDuration(o.sum, 's'));
     });
 
     console.log(' '); // Empty Line for formatting
     let projectsSum = _(projects).sumBy('sum');
-    console.log(chalk.underline.blue(` filtered sum: `) + moment.duration(projectsSum, 's').humanize());
+    console.log(chalk.underline.blue(` filtered sum: `) + this.formatDuration(projectsSum, 's'));
 
     console.log(' '); // Empty Line for formatting
   }
